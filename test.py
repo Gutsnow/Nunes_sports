@@ -10,7 +10,7 @@ def connect_db():
         CREATE TABLE IF NOT EXISTS produtos (
             id INTEGER PRIMARY KEY,
             nome TEXT NOT NULL,
-            codigo TEXT NOT NULL,
+            codigo TEXT NOT NULL UNIQUE,
             descricao TEXT,
             preco REAL
         )
@@ -18,14 +18,26 @@ def connect_db():
     conn.commit()
     return conn, cursor
 
-def inserir_produto(nome, codigo, descricao, preco):
+def gerar_codigo_unico():
     conn, cursor = connect_db()
-    cursor.execute('''
-        INSERT INTO produtos (nome, codigo, descricao, preco) 
-        VALUES (?, ?, ?, ?)
-    ''', (nome, codigo, descricao, preco))
-    conn.commit()
+    cursor.execute('SELECT IFNULL(MAX(id), 0) + 1 FROM produtos')
+    novo_id = cursor.fetchone()[0]
     conn.close()
+    return f"P{novo_id:06d}"
+
+def inserir_produto(nome, descricao, preco):
+    conn, cursor = connect_db()
+    try:
+        codigo = gerar_codigo_unico()  # Gera o código antes da inserção
+        cursor.execute('''
+            INSERT INTO produtos (nome, codigo, descricao, preco) 
+            VALUES (?, ?, ?, ?)
+        ''', (nome, codigo, descricao, preco))
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        messagebox.showerror("Erro", f"Erro ao inserir o produto: {e}")
+    finally:
+        conn.close()
 
 def visualizar_produtos():
     conn, cursor = connect_db()
@@ -40,15 +52,19 @@ def excluir_produto_do_bd(produto_id):
     conn.commit()
     conn.close()
 
-def atualizar_produto(produto_id, nome, codigo, descricao, preco):
+def atualizar_produto(produto_id, nome, descricao, preco):
     conn, cursor = connect_db()
-    cursor.execute('''
-        UPDATE produtos 
-        SET nome = ?, codigo = ?, descricao = ?, preco = ?
-        WHERE id = ?
-    ''', (nome, codigo, descricao, preco, produto_id))
-    conn.commit()
-    conn.close()
+    try:
+        cursor.execute('''
+            UPDATE produtos 
+            SET nome = ?, descricao = ?, preco = ?
+            WHERE id = ?
+        ''', (nome, descricao, preco, produto_id))
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        messagebox.showerror("Erro", f"Erro ao atualizar o produto: {e}")
+    finally:
+        conn.close()
 
 # Funções de Interface
 def atualizar_tabela():
@@ -61,10 +77,9 @@ def atualizar_tabela():
 def cadastrar_produto():
     def salvar_produto():
         nome = entry_nome.get()
-        codigo = entry_codigo.get()
         descricao = entry_descricao.get()
         preco = entry_preco.get()
-        inserir_produto(nome, codigo, descricao, preco)
+        inserir_produto(nome, descricao, preco)
         atualizar_tabela()
         janela_cadastro.destroy()
 
@@ -75,10 +90,6 @@ def cadastrar_produto():
     tk.Label(janela_cadastro, text="Nome:").pack(pady=5)
     entry_nome = tk.Entry(janela_cadastro)
     entry_nome.pack(pady=5)
-
-    tk.Label(janela_cadastro, text="Código:").pack(pady=5)
-    entry_codigo = tk.Entry(janela_cadastro)
-    entry_codigo.pack(pady=5)
 
     tk.Label(janela_cadastro, text="Descrição:").pack(pady=5)
     entry_descricao = tk.Entry(janela_cadastro)
@@ -105,10 +116,9 @@ def editar_produto():
 
     def salvar_edicao():
         nome = entry_nome.get()
-        codigo = entry_codigo.get()
         descricao = entry_descricao.get()
         preco = entry_preco.get()
-        atualizar_produto(produto_id, nome, codigo, descricao, preco)
+        atualizar_produto(produto_id, nome, descricao, preco)
         atualizar_tabela()
         janela_edicao.destroy()
 
@@ -126,11 +136,6 @@ def editar_produto():
     entry_nome = tk.Entry(janela_edicao)
     entry_nome.insert(0, produto[1])
     entry_nome.pack(pady=5)
-
-    tk.Label(janela_edicao, text="Código:").pack(pady=5)
-    entry_codigo = tk.Entry(janela_edicao)
-    entry_codigo.insert(0, produto[2])
-    entry_codigo.pack(pady=5)
 
     tk.Label(janela_edicao, text="Descrição:").pack(pady=5)
     entry_descricao = tk.Entry(janela_edicao)
